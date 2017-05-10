@@ -55,8 +55,6 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
         });
     }
 
-
-
     /**
      * Test the most typical usage of TrustProxies:
      * Trusted X-Forwarded-For header
@@ -91,6 +89,69 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
             $trustedProxy->handle($request, function ($request) use ($forwardedForHeader) {
                 $ips = $request->getClientIps();
                 $this->assertEquals('192.0.2.2', end($ips), 'Assert sets the '.$forwardedForHeader);
+            });
+        }
+    }
+
+    /**
+     * Test X-Forwarded-For header with remote ip lists.
+     */
+    public function test_get_client_ip_with_remote_list()
+    {
+        $trustedProxy = $this->createTrustedProxy([], ['https://www.cloudflare.com/ips-v4']);
+        $request = $this->createProxiedRequest(['REMOTE_ADDR' => '103.21.244.2']);
+
+        $trustedProxy->handle($request, function ($request) {
+            $this->assertEquals('173.174.200.38', $request->getClientIp(), 'Assert trusted proxy x-forwarded-for header used');
+        });
+    }
+
+    /**
+     * Test X-Forwarded-For header with multiple remote ip lists some of which contain ipv6.
+     */
+    public function test_get_client_ip_with_multiple_remote_lists_some_of_which_are_ipv6()
+    {
+        $trustedProxy = $this->createTrustedProxy([], [
+            'https://www.cloudflare.com/ips-v4',
+            'https://www.cloudflare.com/ips-v6',
+        ]);
+
+        $remoteAddrs = [
+            '103.21.244.2',
+            '2400:cb00::1',
+        ];
+
+        foreach ($remoteAddrs as $remoteAddr) {
+            $request = $this->createProxiedRequest(['REMOTE_ADDR' => '103.21.244.2']);
+
+            $trustedProxy->handle($request, function ($request) {
+                $this->assertEquals('173.174.200.38', $request->getClientIp(), 'Assert trusted proxy x-forwarded-for header used');
+            });
+        }
+    }
+
+    /**
+     * Test X-Forwarded-For header with the mix of remote list and ip.
+     */
+    public function test_get_client_ip_with_ip_and_remote_list()
+    {
+        $trustedProxy = $this->createTrustedProxy([], [
+            'https://www.cloudflare.com/ips-v4',
+            'https://www.cloudflare.com/ips-v6',
+            '192.168.10.10',
+        ]);
+
+        $remoteAddrs = [
+            '103.21.244.2',
+            '2400:cb00::1',
+            '192.168.10.10',
+        ];
+
+        foreach ($remoteAddrs as $remoteAddr) {
+            $request = $this->createProxiedRequest(['REMOTE_ADDR' => '103.21.244.2']);
+
+            $trustedProxy->handle($request, function ($request) {
+                $this->assertEquals('173.174.200.38', $request->getClientIp(), 'Assert trusted proxy x-forwarded-for header used');
             });
         }
     }
@@ -258,9 +319,29 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
             ->shouldReceive('get')
             ->with('trustedproxy.proxies')
             ->andReturn($trustedProxies)
+            ->shouldReceive('get')
+            ->with('trustedproxy.cache_ttl')
+            ->andReturn(24*60)
             ->getMock();
 
-        return new TrustProxies($config);
+        $cache = Mockery::mock('Illuminate\Contracts\Cache\Repository');
+
+        if (is_array($trustedProxies)) {
+            // Mock remote lists cache
+            foreach($trustedProxies as $proxy) {
+                if (filter_var($proxy, FILTER_VALIDATE_URL) !== false) {
+                    $contents = file($proxy, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+
+                    $cache->shouldReceive('remember')
+                          ->with($proxy, 24*60, Mockery::on(function ($closure) {
+                              return is_callable($closure);
+                          }))
+                          ->andReturn($contents);
+                }
+            }
+        }
+
+        return new TrustProxies($config, $cache);
     }
 
 }

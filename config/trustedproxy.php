@@ -29,16 +29,33 @@ return [
     ],
 
     /*
+     * To use with cloudflare,
+     * uncomment this:
+     */
+    # 'proxies' => [
+    #    'https://www.cloudflare.com/ips-v4',
+    #    'https://www.cloudflare.com/ips-v6',
+    # ],
+
+    /*
      * Or, to trust all proxies that connect
      * directly to your server, uncomment this:
      */
-     # 'proxies' => '*',
+    # 'proxies' => '*',
 
     /*
      * Or, to trust ALL proxies, including those that
      * are in a chain of forwarding, uncomment this:
     */
     # 'proxies' => '**',
+
+    /**
+     * Cache Time-To-Live
+     *
+     * When using remote ip lists
+     * specify how long to store lists in local cache.
+     */
+    'cache_ttl' => 24*60,
 
     /*
      * Default Header Names
@@ -58,5 +75,5 @@ return [
         \Illuminate\Http\Request::HEADER_CLIENT_HOST  => 'X_FORWARDED_HOST',
         \Illuminate\Http\Request::HEADER_CLIENT_PROTO => 'X_FORWARDED_PROTO',
         \Illuminate\Http\Request::HEADER_CLIENT_PORT  => 'X_FORWARDED_PORT',
-    ]
+    ],
 ];
