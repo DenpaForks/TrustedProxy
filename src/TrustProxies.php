@@ -64,6 +64,7 @@ class TrustProxies
     {
         $this->setTrustedProxyHeaderNames($request);
         $this->setTrustedProxyIpAddresses($request);
+
         return $next($request);
     }
 
@@ -77,12 +78,15 @@ class TrustProxies
         $trustedIps = $this->proxies ?: $this->getTrustedProxies();
 
         // We only trust specific IP addresses
-        if(is_array($trustedIps)) {
+        if (is_array($trustedIps)) {
             $this->setTrustedProxyIpAddressesToSpecificIps($request, $trustedIps);
         }
 
         // We trust any IP address that calls us, but not proxies further
         // up the forwarding chain.
+        // TODO: Determine if this should only trust the first IP address
+        //       Currently it trusts the entire chain (array of IPs),
+        //       potentially making the "**" convention redundant.
         if ($trustedIps === '*') {
             $this->setTrustedProxyIpAddressesToTheCallingIp($request);
         }
@@ -95,23 +99,45 @@ class TrustProxies
         }
     }
 
-    private function setTrustedProxyIpAddressesToSpecificIps(Request $request, $trustedIps)
+    /**
+     * We specify the IP addresses to trust explicitly.
+     *
+     * @param \Illuminate\Http\Request $request
+     * @param array                    $trustedIps
+     */
+    private function setTrustedProxyIpAddressesToSpecificIps($request, $trustedIps)
     {
-        $request->setTrustedProxies((array) $trustedIps);
+        $request->setTrustedProxies((array) $trustedIps, $this->getTrustedHeaderSet());
     }
 
-    private function setTrustedProxyIpAddressesToTheCallingIp(Request $request) {
-        $request->setTrustedProxies($request->getClientIps());
+    /**
+     * We set the trusted proxy to be the first IP addresses received.
+     *
+     * @param \Illuminate\Http\Request $request
+     */
+    private function setTrustedProxyIpAddressesToTheCallingIp($request)
+    {
+        $request->setTrustedProxies($request->getClientIps(), $this->getTrustedHeaderSet());
     }
 
-    private function setTrustedProxyIpAddressesToAllIps(Request $request)
+    /**
+     * Trust all IP Addresses.
+     *
+     * @param \Illuminate\Http\Request $request
+     */
+    private function setTrustedProxyIpAddressesToAllIps($request)
     {
         // 0.0.0.0/0 is the CIDR for all ipv4 addresses
         // 2000:0:0:0:0:0:0:0/3 is the CIDR for all ipv6 addresses currently
         // allocated http://www.iana.org/assignments/ipv6-unicast-address-assignments/ipv6-unicast-address-assignments.xhtml
-        $request->setTrustedProxies(['0.0.0.0/0', '2000:0:0:0:0:0:0:0/3']);
+        $request->setTrustedProxies(['0.0.0.0/0', '2000:0:0:0:0:0:0:0/3'], $this->getTrustedHeaderSet());
     }
 
+    /**
+     * Get trusted proxies list.
+     *
+     * @return array
+     */
     private function getTrustedProxies()
     {
         $proxies = $this->config->get('trustedproxy.proxies');
@@ -135,6 +161,11 @@ class TrustProxies
         return $trustedIps;
     }
 
+    /**
+     * Parse IP list.
+     *
+     * @return array
+     */
     private function parseList($url)
     {
         $ttl = $this->config->get('trustedproxy.cache_ttl');
@@ -147,18 +178,51 @@ class TrustProxies
     }
 
     /**
-     * Set the trusted header names based on teh content of trustedproxy.headers
+     * Set the trusted header names based on the content of trustedproxy.headers.
+     *
+     * Note: Depreciated in Symfony 3.3+, but available for backwards compatibility.
+     *
+     * @depreciated
      *
      * @param \Illuminate\Http\Request $request
      */
     protected function setTrustedProxyHeaderNames(Request $request)
     {
-        $trustedHeaderNames = $this->headers ?: $this->config->get('trustedproxy.headers');
+        $trustedHeaderNames = $this->getTrustedHeaderNames();
 
         if(!is_array($trustedHeaderNames)) { return; } // Leave the defaults
 
         foreach ($trustedHeaderNames as $headerKey => $headerName) {
             $request->setTrustedHeaderName($headerKey, $headerName);
         }
+    }
+
+    /**
+     * Retrieve trusted header names, falling back to defaults if config not set.
+     *
+     * @return array
+     */
+    protected function getTrustedHeaderNames()
+    {
+        return $this->headers ?: $this->config->get('trustedproxy.headers');
+    }
+
+    /**
+     * Construct bit field integer of the header set that setTrustedProxies() expects.
+     *
+     * @return int
+     */
+    protected function getTrustedHeaderSet()
+    {
+        return array_reduce(array_keys($this->getTrustedHeaderNames()), function ($set, $key) {
+            // PHP 7+ gives a warning if non-numeric value is used
+            // resulting in a thrown ErrorException within Laravel
+            // This error occurs with Symfony < 3.3, PHP7+
+            if(! is_numeric($set) || ! is_numeric($key)) {
+                return;
+            }
+
+            return $set | $key;
+        }, 0);
     }
 }
