@@ -1,9 +1,10 @@
 <?php
 
-use Fideloper\Proxy\TrustProxies;
 use Illuminate\Http\Request;
+use PHPUnit\Framework\TestCase;
+use Fideloper\Proxy\TrustProxies;
 
-class TrustedProxyTest extends PHPUnit_Framework_TestCase
+class TrustedProxyTest extends TestCase
 {
     /**
      * Test that Symfony does indeed NOT trust X-Forwarded-*
@@ -33,7 +34,7 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
     public function test_does_trust_trusted_proxy()
     {
         $req = $this->createProxiedRequest();
-        $req->setTrustedProxies(['192.168.10.10'], $this->getDefaultTrustedHeaderSet());
+        $req->setTrustedProxies(['192.168.10.10'], Request::HEADER_X_FORWARDED_ALL);
 
         $this->assertEquals('173.174.200.38', $req->getClientIp(), 'Assert trusted proxy x-forwarded-for header used');
         $this->assertEquals('https', $req->getScheme(), 'Assert trusted proxy x-forwarded-proto header used');
@@ -47,7 +48,21 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
      */
     public function test_trusted_proxy_sets_trusted_proxies_with_wildcard()
     {
-        $trustedProxy = $this->createTrustedProxy([Illuminate\Http\Request::HEADER_CLIENT_IP => 'X_FORWARDED_FOR'], '*');
+        $trustedProxy = $this->createTrustedProxy(Request::HEADER_X_FORWARDED_ALL, '*');
+        $request = $this->createProxiedRequest();
+
+        $trustedProxy->handle($request, function ($request) {
+            $this->assertEquals('173.174.200.38', $request->getClientIp(), 'Assert trusted proxy x-forwarded-for header used with wildcard proxy setting');
+        });
+    }
+
+    /**
+     * Test the next most typical usage of TrustedProxies:
+     * Trusted X-Forwarded-For header, wilcard for TrustedProxies
+     */
+    public function test_trusted_proxy_sets_trusted_proxies_with_double_wildcard_for_backwards_compat()
+    {
+        $trustedProxy = $this->createTrustedProxy(Request::HEADER_X_FORWARDED_ALL, '**');
         $request = $this->createProxiedRequest();
 
         $trustedProxy->handle($request, function ($request) {
@@ -61,7 +76,7 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
      */
     public function test_trusted_proxy_sets_trusted_proxies()
     {
-        $trustedProxy = $this->createTrustedProxy([Illuminate\Http\Request::HEADER_CLIENT_IP => 'X_FORWARDED_FOR'], ['192.168.10.10']);
+        $trustedProxy = $this->createTrustedProxy(Request::HEADER_X_FORWARDED_ALL, ['192.168.10.10']);
         $request = $this->createProxiedRequest();
 
         $trustedProxy->handle($request, function ($request) {
@@ -74,7 +89,7 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
      */
     public function test_get_client_ips()
     {
-        $trustedProxy = $this->createTrustedProxy([Illuminate\Http\Request::HEADER_CLIENT_IP => 'X_FORWARDED_FOR'], ['192.168.10.10']);
+        $trustedProxy = $this->createTrustedProxy(Request::HEADER_X_FORWARDED_ALL, ['192.168.10.10']);
 
         $forwardedFor = [
             '192.0.2.2',
@@ -161,7 +176,7 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
      */
     public function test_get_client_ip_with_muliple_ip_addresses_some_of_which_are_trusted()
     {
-        $trustedProxy = $this->createTrustedProxy([Illuminate\Http\Request::HEADER_CLIENT_IP => 'X_FORWARDED_FOR'], ['192.168.10.10', '192.0.2.199']);
+        $trustedProxy = $this->createTrustedProxy(Request::HEADER_X_FORWARDED_ALL, ['192.168.10.10', '192.0.2.199']);
 
         $forwardedFor = [
             '192.0.2.2',
@@ -184,7 +199,7 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
      */
     public function test_get_client_ip_with_muliple_ip_addresses_all_proxies_are_trusted()
     {
-        $trustedProxy = $this->createTrustedProxy([Illuminate\Http\Request::HEADER_CLIENT_IP => 'X_FORWARDED_FOR'], '*');
+        $trustedProxy = $this->createTrustedProxy(Request::HEADER_X_FORWARDED_ALL, '*');
 
         $forwardedFor = [
             '192.0.2.2',
@@ -203,73 +218,34 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
     }
 
     /**
-     * Test X-Forwarded-For header with multiple IP addresses, with ** wildcard trusting of all proxies in the chain
+     * Test distrusting a header.
      */
-    public function test_get_client_ip_with_muliple_ip_addresses_all_proxies_and_all_forwarding_proxies_are_trusted()
+    public function test_can_distrust_headers()
     {
-        $trustedProxy = $this->createTrustedProxy([Illuminate\Http\Request::HEADER_CLIENT_IP => 'X_FORWARDED_FOR'], '**');
-
-        $forwardedFor = [
-            '192.0.2.2',
-            '192.0.2.2, 192.0.2.199',
-            '192.0.2.2, 99.99.99.99, 192.0.2.199',
-            '192.0.2.2, 2001:0db8:0a0b:12f0:0000:0000:0000:0001, 192.0.2.199',
-            '192.0.2.2, 2c01:0db8:0a0b:12f0:0000:0000:0000:0001, 192.0.2.199',
-            '192.0.2.2,192.0.2.199',
-        ];
-
-        foreach($forwardedFor as $forwardedForHeader) {
-            $request = $this->createProxiedRequest(['HTTP_X_FORWARDED_FOR' => $forwardedForHeader]);
-
-            $trustedProxy->handle($request, function ($request) use ($forwardedForHeader) {
-                $this->assertEquals('192.0.2.2', $request->getClientIp(), 'Assert sets the '.$forwardedForHeader);
-            });
-        }
-    }
-
-    /**
-     * Test renaming the X-Forwarded-For header.
-     */
-    public function test_can_rename_forwarded_for_header()
-    {
-        $trustedProxy = $this->createTrustedProxy([
-            \Illuminate\Http\Request::HEADER_CLIENT_IP => 'x-fidelopers-whacky-http-proxy',
-        ], ['192.168.10.10']);
-
-        $request = $this->createProxiedRequest(['HTTP_X_FIDELOPERS_WHACKY_HTTP_PROXY' => '173.174.200.38']);
-
-        $trustedProxy->handle($request, function ($request) {
-            $this->assertEquals('173.174.200.38', $request->getClientIp(), 'Assert trusted proxy x-fidelopers-whacky-http-proxy header used');
-        });
-    }
-
-
-    /**
-     * Test renaming *all* the headers.
-     */
-    public function test_can_rename_forwarded_proto_header()
-    {
-        $trustedProxy = $this->createTrustedProxy([
-            Request::HEADER_CLIENT_IP    => 'x-fideloper-troll-for',
-            Request::HEADER_CLIENT_HOST  => 'x-fideloper-troll-host',
-            Request::HEADER_CLIENT_PROTO => 'x-fideloper-troll-proto',
-            Request::HEADER_CLIENT_PORT  => 'x-fideloper-troll-port',
-        ], ['192.168.10.10']);
+        $trustedProxy = $this->createTrustedProxy(Request::HEADER_FORWARDED, ['192.168.10.10']);
 
         $request = $this->createProxiedRequest([
-            'HTTP_X_FIDELOPER_TROLL_FOR'   => '173.174.200.38',
-            'HTTP_X_FIDELOPER_TROLL_HOST'  => 'serversforhackers.com',
-            'HTTP_X_FIDELOPER_TROLL_PORT'  => '443',
-            'HTTP_X_FIDELOPER_TROLL_PROTO' => 'https',
+            'HTTP_FORWARDED' => 'for=173.174.200.40:443; proto=https; host=serversforhackers.com',
+            'HTTP_X_FORWARDED_FOR' => '173.174.200.38',
+            'HTTP_X_FORWARDED_HOST' => 'svrs4hkrs.com',
+            'HTTP_X_FORWARDED_PORT' => '80',
+            'HTTP_X_FORWARDED_PROTO' => 'http',
         ]);
 
         $trustedProxy->handle($request, function ($request) {
-            $this->assertEquals('173.174.200.38', $request->getClientIp(), 'Assert trusted proxy x-fideloper-troll-for header used');
-            $this->assertEquals('https', $request->getScheme(), 'Assert trusted proxy x-fideloper-troll-proto header used');
-            $this->assertEquals('serversforhackers.com', $request->getHost(), 'Assert trusted proxy x-fideloper-troll-host header used');
-            $this->assertEquals(443, $request->getPort(), 'Assert trusted proxy x-fideloper-troll-port header used');
+            $this->assertEquals('173.174.200.40', $request->getClientIp(),
+                'Assert trusted proxy used forwarded header for IP');
+            $this->assertEquals('https', $request->getScheme(),
+                'Assert trusted proxy used forwarded header for scheme');
+            $this->assertEquals('serversforhackers.com', $request->getHost(),
+                'Assert trusted proxy used forwarded header for host');
+            $this->assertEquals(443, $request->getPort(), 'Assert trusted proxy used forwarded header for port');
         });
     }
+
+    ################################################################
+    # Utility Functions
+    ################################################################
 
     /**
      * Fake an HTTP request by generating a Symfony Request object.
@@ -296,7 +272,7 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
         // which is likely something like this:
         $request = Request::create('http://localhost:8888/tag/proxy', 'GET', [], [], [], $serverOverRides, null);
         // Need to make sure these haven't already been set
-        $request->setTrustedProxies([], $this->getDefaultTrustedHeaderSet());
+        $request->setTrustedProxies([], Request::HEADER_X_FORWARDED_ALL);
 
         return $request;
     }
@@ -342,53 +318,5 @@ class TrustedProxyTest extends PHPUnit_Framework_TestCase
         }
 
         return new TrustProxies($config, $cache);
-    }
-
-    /**
-     * Test distrusting a header.
-     */
-    public function test_can_distrust_headers()
-    {
-        $trustedProxy = $this->createTrustedProxy([
-            (defined('Illuminate\Http\Request::HEADER_FORWARDED') ? Request::HEADER_FORWARDED : 'forwarded') => 'forwarded',
-            Request::HEADER_CLIENT_IP => null,
-            Request::HEADER_CLIENT_HOST => null,
-            Request::HEADER_CLIENT_PROTO => null,
-            Request::HEADER_CLIENT_PORT => null,
-        ], ['192.168.10.10']);
-
-        $request = $this->createProxiedRequest([
-            'HTTP_FORWARDED' => 'for=173.174.200.40:443; proto=https; host=serversforhackers.com',
-            'HTTP_X_FORWARDED_FOR' => '173.174.200.38',
-            'HTTP_X_FORWARDED_HOST' => 'svrs4hkrs.com',
-            'HTTP_X_FORWARDED_PORT' => '80',
-            'HTTP_X_FORWARDED_PROTO' => 'http',
-        ]);
-
-        $trustedProxy->handle($request, function ($request) {
-            $this->assertEquals('173.174.200.40', $request->getClientIp(),
-                'Assert trusted proxy used forwarded header for IP');
-            $this->assertEquals('https', $request->getScheme(),
-                'Assert trusted proxy used forwarded header for scheme');
-            $this->assertEquals('serversforhackers.com', $request->getHost(),
-                'Assert trusted proxy used forwarded header for host');
-            $this->assertEquals(443, $request->getPort(), 'Assert trusted proxy used forwarded header for port');
-        });
-    }
-
-    /**
-     * The HEADER_X_FORWARDED_ALL constant was added in Symfony 3.3, so check for it to determine version
-     */
-    protected function usingSymfony3_3Plus()
-    {
-        return defined(Request::class . '::HEADER_X_FORWARDED_ALL');
-    }
-
-    /**
-     * Symfony 3.3 uses the Trusted Header Set, but earlier versions don't
-     */
-    protected function getDefaultTrustedHeaderSet()
-    {
-        return $this->usingSymfony3_3Plus() ? Request::HEADER_X_FORWARDED_ALL : 0;
     }
 }

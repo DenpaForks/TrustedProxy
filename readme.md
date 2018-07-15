@@ -4,11 +4,29 @@
 
 [![Total Downloads](https://poser.pugx.org/fideloper/proxy/downloads.png)](https://packagist.org/packages/fideloper/proxy)
 
-## Updated for Laravel 5.
+## Laravel 5.6
 
-> You can still use this for Version 4 of Laravel. See the latest v2 tag of this repository, which is compatible with version 4 of Laravel.
+Please use tag 4.0+ for Laravel 5.6:
 
-Laravel 5 has a much nicer system for Middleware, which this package now takes advantage of.
+```bash
+composer require fideloper/proxy:~4.0
+```
+
+**TrustedProxy is still included with Laravel 5.6+.** To configure for this version of Laravel, please see: https://laravel.com/docs/5.6/requests#configuring-trusted-proxies
+
+## Laravel 5.5
+
+**TrustedProxy is now included with Laravel 5.5+.** To configure for this version of Laravel, please see: https://laravel.com/docs/5.5/requests#configuring-trusted-proxies
+
+Please use tag 3.0+ for Laravel 5.5:
+
+```bash
+composer require fideloper/proxy:~3.0
+```
+
+## Laravel 5.0 - 5.4
+
+For Laravel versions 5.0 - 5.4, please continue below.
 
 New features include:
 
@@ -30,6 +48,10 @@ Or of course, you can edit your `composer.json` file directly:
     }
 }
 ```
+
+## Laravel 4
+
+You can still use this package for Version 4 of Laravel. See the latest v2 tag of this repository, which is compatible with version 4 of Laravel.
 
 ## WAT
 
