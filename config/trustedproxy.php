@@ -32,12 +32,6 @@ return [
      */
     # 'proxies' => '*',
 
-    /*
-     * Or, to trust all proxies that connect
-     * directly to your server, use a "*"
-     */
-     # 'proxies' => '*',
-
     /**
      * Cache Time-To-Live
      *
