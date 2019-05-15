@@ -15,22 +15,29 @@ return [
      * of your proxy (e.g. if using ELB or similar).
      *
      */
-    'proxies' => null, // [<ip addresses>,], '*'
+    'proxies' => null, // [<ip addresses>,], '*', '<ip addresses>,'
 
     /*
      * To use with cloudflare,
      * uncomment this:
      */
-    # 'proxies' => [
-    #    'https://www.cloudflare.com/ips-v4',
-    #    'https://www.cloudflare.com/ips-v6',
-    # ],
+    // 'proxies' => [
+    //    'https://www.cloudflare.com/ips-v4',
+    //    'https://www.cloudflare.com/ips-v6',
+    // ],
+
+    /*
+     * To trust one or more specific proxies that connect
+     * directly to your server, use an array or a string separated by comma of IP addresses:
+     */
+    // 'proxies' => ['192.168.1.1'],
+    // 'proxies' => '192.168.1.1, 192.168.1.2',
 
     /*
      * Or, to trust all proxies that connect
      * directly to your server, uncomment this:
      */
-    # 'proxies' => '*',
+    // 'proxies' => '*',
 
     /**
      * Cache Time-To-Live
@@ -42,15 +49,19 @@ return [
 
     /*
      * Which headers to use to detect proxy related data (For, Host, Proto, Port)
-     * 
+     *
      * Options include:
-     * 
+     *
      * - Illuminate\Http\Request::HEADER_X_FORWARDED_ALL (use all x-forwarded-* headers to establish trust)
      * - Illuminate\Http\Request::HEADER_FORWARDED (use the FORWARDED header to establish trust)
-     * 
+     * - Illuminate\Http\Request::HEADER_X_FORWARDED_AWS_ELB (If you are using AWS Elastic Load Balancer)
+     *
+     * - 'HEADER_X_FORWARDED_ALL' (use all x-forwarded-* headers to establish trust)
+     * - 'HEADER_FORWARDED' (use the FORWARDED header to establish trust)
+     * - 'HEADER_X_FORWARDED_AWS_ELB' (If you are using AWS Elastic Load Balancer)
+     *
      * @link https://symfony.com/doc/current/deployment/proxies.html
      */
     'headers' => Illuminate\Http\Request::HEADER_X_FORWARDED_ALL,
 
-    
 ];

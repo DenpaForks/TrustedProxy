@@ -26,14 +26,14 @@ class TrustProxies
     /**
      * The trusted proxies for the application.
      *
-     * @var array
+     * @var null|string|array
      */
     protected $proxies;
 
     /**
      * The proxy header mappings.
      *
-     * @var array
+     * @var null|string|int
      */
     protected $headers;
 
@@ -87,7 +87,6 @@ class TrustProxies
         if ($trustedIps === '*' || $trustedIps === '**') {
             return $this->setTrustedProxyIpAddressesToTheCallingIp($request);
         }
-
     }
 
     /**
@@ -158,10 +157,25 @@ class TrustProxies
     /**
      * Retrieve trusted header name(s), falling back to defaults if config not set.
      *
-     * @return array
+     * @return int A bit field of Request::HEADER_*, to set which headers to trust from your proxies.
      */
     protected function getTrustedHeaderNames()
     {
-        return $this->headers ?: $this->config->get('trustedproxy.headers');
+        $headers = $this->headers ?: $this->config->get('trustedproxy.headers');
+        switch ($headers) {
+            case 'HEADER_X_FORWARDED_AWS_ELB':
+            case Request::HEADER_X_FORWARDED_AWS_ELB:
+                return Request::HEADER_X_FORWARDED_AWS_ELB;
+                break;
+            case 'HEADER_FORWARDED':
+            case Request::HEADER_FORWARDED:
+                return Request::HEADER_FORWARDED;
+                break;
+            default:
+                return Request::HEADER_X_FORWARDED_ALL;
+        }
+
+        // Should never reach this point
+        return $headers;
     }
 }
